@@ -1,0 +1,338 @@
+---
+title: "Final Project-Cost Effectiveness analysis of green strategies for reduction of combined sewer overflow"
+author: "Kanchan Upadhyay"
+date: "December 16, 2017"
+output: 
+  html_document:
+    toc: true
+    theme: paper
+    highlight: tango
+    fontsize: 9pt
+    mainfont: Times
+    geometry: margin = 1in
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(ggplot2)
+require(tidyverse)
+require(forcats)
+require(polycor)
+require(corrplot)
+require(knitr)
+require(tidyverse)
+require(MASS)
+require(ISLR)
+require(dplyr)
+require(anova)
+```
+
+##1. Background    
+The city of Pittsburgh is served by combined sewer network, which uses same infrastructure for collection, transportation and treatment of stormwater and wastewater. This system is designed to overflow into nearby rivers or streams during periods of heavy rainfall so as to minimize the upstream surface overflow. This  pollutes these water bodies.   
+
+There are two infrastructural strategies  to reduce these overflows- gray infrastructure strategies and green infrastructure strategies. Gray infrastructure strategies involve increasing the capacity of sewer and stormwater collection system. Green infrastructure strategies involve solutions like planting trees, installing rain gardens, etc to temporarily retain stormwater in the soil and thus reduce/prevent downstream overflow into the river.   
+
+##2. Objective    
+This project analyses the cost effectiveness of two green infrastructure strategies, namely, installation of rain gardens and planting of trees by the stormwater municipality of Pittsburgh. As these green infrastructure strategies involve modification of private properties, private property owners might have to be compensated appropriately by the municipality for carrying on any modification in their property. The objective of this project is to identify whether or not people value open spaces and trees and by how much. Cost incurred to the municipality for the strategy will include the compensation amount provided to property owners and the installation cost of rain garden/trees. Outcome of these strategies across different sewersheds will be estimated on the basis of cost incurred per overflow reduced in the downstream.  
+
+##3. Methodology     
+###3.1. Approach  
+Four data sets were utilized for the study - price data of the properties, property assessment data, land use data and the sewershed data. All these data are at the level of parcel identification numbers(Parids). These data were cleaned and joined together at the level of parids. To determine whether or not people value open spaces and trees, linear regression modelling was performed to determine the relation of price to other variables associated with the property. The coefficients from the regression modelling are used to determine the  relation of available open spaces and trees in a property with its price. The presence of relation will  determine if people value these variables and by how much. This has also been used to determine the compensation amount that municipality should offer to the property owners to pursue the green infrastructure strategy. Rebate amount by the municipality will include both the compensation amount and the installation amount.Rebate amount was estimated for trees on `$`/tree basis and for rain garden on `$`/sqft basis. This along with stormwater performance data for rain garden/trees and sewershed characteristic will help determine the outcome of these strategies on `$`/overflow reduced.
+
+
+### 3.2. Data cleaning and data merging  
+
+```{r include=FALSE}
+#reading data
+price.res<-read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/sales_county.csv", header = TRUE)
+
+desc.res<-read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/assessments_city.csv", header = TRUE)
+
+land.use<-read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/land_use_city.csv", header = TRUE)
+
+sewersheds<-read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/sewersheds.csv", header = TRUE)
+```
+
+
+####3.2.1. Data cleaning  
+```{r include=FALSE}
+ 
+colnames(price.res)<-c("parid","saledate","saledesc","price")
+
+colnames(desc.res)<-c("parid","property.city","muni.desc","school.desc","owner.desc","use.desc","lot.area","homestead.flag","year.built","condition","bedrooms","fullbaths","halfbaths","finished.living.area","zip","geoid10","hood","census.block.group","neighborhood")
+
+colnames(land.use)<-c("parid","land.use","sqft")
+
+colnames(sewersheds)<-c("parid","sewer.shed","cso.per.inflow")
+```
+
+*Cleaning of property sales data*: Property sales data consists of sale date, sale description and sale price of properties at the level of pareids.For this data, mean value and ranges of price across different sales category were analyzed and it was decided to include only valid sales for the study. To achieve this, only the following sale descriptions- "VALID","OTHER VALID" and "OTHER" have been included in the price data.This has been done to ensure that the invalid sales data  do not distort our price estimation for the properties and  regression model. 
+
+```{r include=FALSE}
+price.res.new<-price.res%>%
+  dplyr::filter(saledesc == "VALID SALE" |saledesc=="OTHER VALID"|saledesc=="OTHER")# filtering by valid sales
+
+price.res.new<-price.res.new[!duplicated(price.res.new$parid),]# removing duplicate values
+```
+
+*Cleaning of property assessment data*:Property assesment data consists of features related to the property like condition, living space,etc at the level of pareids.For this data, those enteries where property city is different from Pittsburgh were removed.This was done to limit our analysis to the city of Pittsburgh. Their was some duplicacy in the pareid as some of the pareids were associated with different zips. Such duplicated rows were removed. Columns like "property.city, school.desc, homestead.flag, geoid10, neighborhood, census.block.group, muni.desc,zip"  which were either same for the entire data set or were not considered useful for analysis were removed.    
+
+```{r include=FALSE}
+desc.res.new<-desc.res%>%
+  filter(property.city=="PITTSBURGH")%>%
+  dplyr::select(-property.city,-school.desc,-homestead.flag,-geoid10,-neighborhood,census.block.group,-muni.desc,-zip)
+
+desc.res.new<-desc.res.new[!duplicated(desc.res.new$parid),]
+```
+
+*Cleaning of land use data*:Land use data consists of information on building area, impervious area, open area and tree area contained in a pareid. Land use data was spread so that all the uses- buildings, open spaces and trees corresponding to a parcel id have unique rows.All parcel id in the data are unique so there was no need of additional filtering.  
+
+```{r include=FALSE}
+land.use.new<-land.use%>%spread(key = "land.use",value = "sqft",drop=TRUE)
+
+colnames(land.use.new)<-c("parid","bldgs.sqft","impervious.sqft","open.space.sqft","trees.sqft")
+
+```
+
+*Cleaning of sewer shed data*: Sewer shed data consists of information on the name of sewer shed associated with each pareid and the performance of that sewershed in terms of cso.per.inflow which is the ratio of amount of overflow reduced to amount of runoff reduced.In this data, it was observed that parcel ids  are duplicated as some of them are associated with multiple sewersheds.To overcome this anomaly, the duplicated levels were removed.    
+
+```{r include=FALSE}
+sewersheds.new<-sewersheds[!duplicated(sewersheds$parid),]
+```
+
+
+#### 3.2.2. Data merging
+
+All the three data sets - price data, assessment data and sewershed data were joined to assessment data as assesment data contains all parids associated with "Pittsburgh" city. Those pareids where price was "NA" were removed. "NA" values in building area, impervious area, open space area and tree area were substituted with 0.  
+
+```{r include=FALSE}
+city.combined.data<-left_join(desc.res.new,price.res.new,by="parid")
+
+city.combined.data<-left_join(city.combined.data,land.use.new,by="parid")
+
+city.combined.data<-left_join(city.combined.data,sewersheds.new,by="parid")
+
+city.combined.data$parid<-as.factor(city.combined.data$parid)
+
+city.combined.data<-city.combined.data[!is.na(city.combined.data$price),] #removing those rows where price is NA
+
+city.combined.data<-city.combined.data%>%
+  dplyr::filter(price!=0)
+
+city.combined.data$bldgs.sqft[is.na(city.combined.data$bldgs.sqft)]<-0
+
+city.combined.data$impervious.sqft[is.na(city.combined.data$impervious.sqft)]<-0
+
+city.combined.data$open.space.sqft[is.na(city.combined.data$open.space.sqft)]<-0
+
+city.combined.data$trees.sqft[is.na(city.combined.data$trees.sqft)]<-0
+
+city.combined.data$bedrooms[is.na(city.combined.data$bedrooms)]<-0
+
+city.combined.data$fullbaths[is.na(city.combined.data$fullbaths)]<-0
+
+city.combined.data$halfbaths[is.na(city.combined.data$halfbaths)]<-0
+
+city.combined.data<-city.combined.data%>%
+  dplyr::mutate(bathrooms=fullbaths+0.5*halfbaths)%>%
+  dplyr::select(-fullbaths,-halfbaths,-saledate)
+
+city.combined.data<-city.combined.data%>%droplevels()
+
+city.combined.data
+
+```
+
+The summary of final data sample selected for analysis is as below:  
+
+```{r echo=FALSE}
+summary(city.combined.data)
+```
+
+#### 3.2.3. Data Visualization   
+To see the relation between prices of the property and open spaces/trees, scatter plots between these variables and price were plotted. The plot below show the relation between price and open space differenciated across different house condition and types of houses:    
+
+```{r echo=FALSE, fig.align = "center"}
+ggplot(city.combined.data)+geom_point(mapping =aes(x=open.space.sqft,y=price,colour=use.desc))+facet_wrap(~condition,nrow=5,ncol=2)
+```
+
+The plots below show the relation between price and trees across different house condition and types of house:  
+```{r echo=FALSE, fig.align = "center"}
+ggplot(city.combined.data)+geom_point(mapping =aes(x=trees.sqft,y=price,colour=use.desc))+facet_wrap(~condition,nrow=5,ncol=2)
+```
+
+It is difficult to visualize the relation between price and Open space/trees. 
+
+##4. Linear Regression modelling   
+To determine if people value open spaces and trees, linear regression modelling on price as dependent variable has been performed. Selection of independent variable require determination of correlation of price with other variables. 
+
+
+```{r include=FALSE}
+# Define "polycor function(copied from Lecture-12)"
+#Function taken from ?pairs.  
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    require(polycor)
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = pmax(1, cex.cor * r))
+}
+
+```
+
+###4.1. Determintation of correlation between price and indepedent variables  
+```{r include=FALSE}
+city.combined.new<-dplyr::select(city.combined.data,-parid,-census.block.group,-sewer.shed,-cso.per.inflow,-saledesc,-year.built) # making a new data set comprising of variables that I think may have an impact on price
+```
+
+The correlation of variables with price and among themselves was analyzed using pairs and hetcor function. The heat map below depict the relation.  
+
+```{r include=FALSE}
+pairs(city.combined.new, lower.panel = panel.cor)
+```
+
+
+```{r echo=FALSE,warning=FALSE, fig.align='center'}
+corrplot.price<-hetcor(city.combined.new)
+
+corrplot(corrplot.price$correlations)
+```
+
+As seen from the figures above,price is correlated to owner description,lot area, condition, no. of bedrooms, finished living area, neighborhood, building area, impervious area, trees area and no. of bathrooms.  
+Further inspection reveals that some of these variables are strongly correlated to each other. For selecting variables for regression analysis, it is essential to identify such correlations.Since we ought to determine relation of price with open area and trees we must include "open.space.sqft" and "trees.sqft" in regression model. Lot area is strongly correlated to building area, impervious area, open space area,trees area so that has been excluded. No. of bedrooms,no. of bathrooms and building area have strong correlation with finished living area so only the variable "finished.living.area" has been included and others have been excluded.Regression modelling is done as below:  
+```{r}
+price.model<-lm(price~owner.desc+condition+finished.living.area+hood+open.space.sqft+trees.sqft+impervious.sqft,data= city.combined.data)
+```
+
+```{r include=FALSE}
+summary(price.model)
+
+plot(price.model, which = 1:2)
+```
+
+
+###4.2.Diagnosis of the model  
+This model has an adjusted R-squared value of 0.717 which means that around 70% of the variation in the price can be explained by the model. The mean of residuals is not zero and they don't have constant variance. Variance in residuals is low for lower values of price and high for higher values of price. To improvise the distribution of residuals, log transformation of dependent variable has been performed.  
+
+```{r}
+price.model.log<-lm(log(price)~owner.desc+condition+finished.living.area+open.space.sqft+trees.sqft+impervious.sqft+hood,data= city.combined.data)
+```
+
+For the log level model, the mean of residuals is closer to zero and they have much constant variance. The value of adjusted R-square value for the log-level model is still high at 65.5%. p-value for the model is 2e-16 which is also much lower than the assumed threshold of 0.05 so the model is good to derive results. The coefficients associated with some variable and the plot of residuals for this model are as below:  
+
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+price.log.coeff<-summary(price.model.log)$coeff
+
+adj.r.squred<-summary(price.model)$adj.r.squared
+
+knitr::kable(price.log.coeff[1:17,], 
+             digits = c(6, 6, 7, 7), 
+             full_width = F) 
+
+plot(price.model.log, which = 1:2)
+```
+
+###4.3. Interpretation of the model and results  
+**Calculation for rebate**  
+
+*For variable "open.space.sqft"*, the result of the modelling is significant with p-value of 0.0005, so it can be conclusively establised that there is a correlation between open space and price. Coefficient for this variable is 0.000033 and positive which means any unit increase in open space (in sqft) will increase the price. As such, compensation needs to be awarded by the municipalities to the property owners for installation of rain gardens in the open space. The amount of rebate per sqft of rain garden can be calculated as below:  
+
+
+Since the regression modelling is done at log-level, the interpretation of coefficients can be seen as:  
+$Change\:in\: price\: with\: respect\: to\: open\: area = Coefficient * mean(price)$  
+
+Mean value of price is `$``r mean(city.combined.new$price)`.    
+
+So the compensation per square feet of open space would be    
+
+$$
+Compensation\:per\:square\:foot = Coefficient*mean(price)\\ 
+                                =3.27e-5 `*` 157705  \\ 
+                                = 5.15 $/sqft  \\ 
+Installation\: cost\: per\: square\: foot = 6 $/sqft   \\
+Rebate = Installation\: cost + Compensation\: cost  \\
+Rebate\: for\: rain\: garden($/sqft) = 11.15 $/sqft  \\
+$$
+
+*For trees*, the regression result is inconclusive as the p-value is very high. So the evaluation of whether or not people value trees can not be done which leads to the assumption that municipality would not have to offer any compensation to the property owners for planting of trees.The amount of rebate per tree can be calculated as below:
+
+
+$$
+Compensation\: per\: tree = 0$\\ 
+Installation\: cost\: per\: tree = 20 $/tree\\
+Rebate\: for\: tree\:(`$`/tree) = 20$/tree\\
+$$
+
+**Calculation for stormwater performance **    
+
+$$
+Runoff\:reduced\:per\:tree = 1000\:gallons\\    
+Runoff\: reduction\: outcome\: for\: trees($/runoff\: reduced) = 20/1000\\   
+                                                     = 0.02\\   
+Runoff\: reduced\: per\: sqft\: of\: rain\: garden\: = 3.5 gallons/sqft\\     
+Runoff\: reduction\: outcome\: for\: rain\: garden($/runoff\: reduced) = 11.15/3.5\\  
+                                                           = 3.18\\     
+$$
+
+From the calculation it looks like trees are lot more cost effective than rain gardens in reducing runoff. 
+
+##5. Determination of cost effectiveness across Sewersheds
+
+To identify the sewersheds of the Pittsburgh city, assesment data has been merged with the sewershed data. Merged data will consist of pareids associated with the Pittsburgh city and corresponding Sewer shed on which it falls.Data was then grouped by sewershed and overall performance in terms of cost per overflow reduced has been calculated for all sewersheds for both rain gardens and trees. Outcome in terms of rebate per overflow reduced can be calculated as,
+
+$Overflow\: reduced= Cso.per.inflow * runoff\: reduced$   
+$Outcome = Cost\: incurred/overflow\: reduced$          
+$Outcome(rebate/overflow\: reduced) = Runoff\: reduction\: outcome/ cso.per.inflow$    
+
+Outcome across all sewersheds has been calculated for both trees and rain forests. Top 5 cost-effective sewersheds have been identified on the basis of least amount of rebate required per overflow reduced. Results are same for both trees and rain forests.They are as tabulated below:  
+
+```{r echo=FALSE,warning=FALSE, fig.align='center'}
+combined.sewershed<-left_join(desc.res.new,sewersheds.new,by="parid")
+
+combined.sewershed<-combined.sewershed%>%dplyr::select(sewer.shed,cso.per.inflow)
+
+combined.sewershed<-combined.sewershed%>%
+                       group_by(sewer.shed)%>%
+                       summarize(avg.csoperinflow=mean(cso.per.inflow))
+                       
+combined.sewershed<-combined.sewershed%>% filter(avg.csoperinflow!=0)
+
+combined.sewershed<-combined.sewershed%>%
+                      mutate(tree.outcome=0.02/avg.csoperinflow,rainforest.outcome=3.18/avg.csoperinflow)%>%
+                      arrange(tree.outcome)
+
+top.sewershed<-head(combined.sewershed,5)
+
+kable(top.sewershed,full_width = F)
+```
+
+##6. Conclusion  
+In this study, cost effectiveness of green infrastructure strategies for reduction is combined sewer outflow was assessed. From the results of linear regressive modelling, it was observed that people value open spaces, so property owners have to be compensated by the stormwater municipality for coverting these open spaces to rain gardens. The results for people valuation of trees was inconclusive for the regression model, so it was assumed that property owners need not to be compensated by the stormwater municipality for planting of trees. Rebate came out to be 20`$`/tree for planting trees and 11.15`$`/sqft for installing raingardens. Runoff reduction outcome for trees is 0.02`$`/runoff reduced and 3.18`$`/runoff reduced for rain gardens.Thus, planting trees is more cost-effective green infrastructure strategy in terms of Rebate per overflow reduced. 
+
+
+##7. References  
+
+Blackhurst,MF.(2017).*Lecture 12 Programming in R for Data Analytics notes[lecture note]*.Carnegie Mellon University.Delivered on November 29,2017.  
+
+ShareLaTeX.*Spacing in Maths mode*. Retrieved from :https://www.sharelatex.com/learn/Spacing_in_math_mode.  
+
+Allegheny County. Allegheny County Urban Tree Canopy.Division of Computer Services Geographic Information Systems Group, 2010. http://www.pasda.psu.edu/uci/MetadataDisplay.aspx?entry=PASDA&file=AlleghenyCountyUrbanTreeCanopy2010.xml&dataset=1203.  
+
+Allegheny County Wooded Areas. Division of Computer Services Geographic Information Systems Group, 2011. http://www.pasda.psu.edu/uci/MetadataDisplay.aspx?entry=PASDA&file=AlleghenyCounty_WoodedAreas2011.xml&dataset=1228.  
+
+"Allegheny County Property Assessments." https://data.wprdc.org/dataset/property-assessments  
+
+"Allegheny County Property Sale Transactions." https://data.wprdc.org/dataset/real-estate-sales  
+
+City of Pittsburgh. Parcels.Geographic Data, 2015. http://pittsburghpa.gov/dcp/gis/gis-data-new.   
+
+Street Curbs. Geographic Data, 2015. http://pittsburghpa.gov/dcp/gis/gis-data-new.
+
+PWSA (Pittsburgh Water and Sewer Authority). 2016. Sewershed Overview Map. http://www.arcgis.com/home/webmap/viewer.html?webmap=f96943c1e46e48dcad9abe5282bc58a8&extent=-80.2691,40.3363,-79.7621,40.5663
+
+
