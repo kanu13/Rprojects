@@ -1,0 +1,247 @@
+---
+title: "Assignment 5"
+author: "Kanchan Upadhyay"
+date: 'Assigned Nov 30, Due Dec 8'
+output: 
+  html_document:
+    toc: true
+    theme: paper
+    highlight: tango
+---
+
+```{r include=FALSE}
+require(ggplot2)
+require(tidyverse)
+require(forcats)
+require(polycor)
+require(corrplot)
+require(knitr)
+require(MASS)
+require(ISLR)
+require(stringr)
+require(dplyr)
+require(anova)
+```
+
+### 0. Read and Clean Data
+
+I include some code below to read and clean the data. 
+
+```{r}
+pgh.sales <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/pgh_sales_2012_nov2017.csv", header = TRUE)
+
+pgh.sales$owner.renter <- ifelse(pgh.sales$HOMESTEADFLAG == "HOM", "owner occupied", "rental")
+pgh.sales$owner.renter <- factor(pgh.sales$owner.renter)
+# Assume missing values for full and half bathrooms means 0
+pgh.sales$bathrooms <- ifelse(is.na(pgh.sales$FULLBATHS), 0, pgh.sales$FULLBATHS) + 
+                       ifelse(is.na(pgh.sales$HALFBATHS), 0, pgh.sales$HALFBATHS/2)
+pgh.sales <- dplyr::select(pgh.sales, -HOMESTEADFLAG, -FULLBATHS, - HALFBATHS)
+
+pgh.sales$PROPERTYZIP <- factor(pgh.sales$PROPERTYZIP)
+
+pgh.sales$CONDITIONDESC <- factor(pgh.sales$CONDITIONDESC, 
+                              levels = c("UNSOUND", 
+                                         "VERY POOR",
+                                         "POOR",
+                                         "FAIR",
+                                         "GOOD",
+                                         "VERY GOOD",
+                                         "EXCELLENT"))
+
+pgh.sales$PROPERTYZIP <- fct_reorder(pgh.sales$PROPERTYZIP, pgh.sales$PRICE)
+pgh.sales$USEDESC <- fct_reorder(pgh.sales$USEDESC, pgh.sales$PRICE)
+
+# Drop all rows with missing values and zero lot size or floor space
+
+pgh.sales <- filter(pgh.sales, FINISHEDLIVINGAREA > 0 & LOTAREA > 0)
+pgh.sales <- na.omit(pgh.sales)
+pgh.sales <- droplevels(pgh.sales)# drop unused levels
+pgh.sales<-as.data.frame(pgh.sales)
+```
+
+The code below renames the variables for convenience. I indicate the original name in case you need to review the metadata at data.wprdc.org/dataset/real-estate-sales and data.wprdc.org/dataset/property-assessments. 
+
+```{r }
+colnames(pgh.sales) <- c("price",              # PRICE 
+                         "lot.size.acres",     # LOTAREA in acres 
+                         "condition",          # CONDITIONDESC 
+                         "type",               # USEDESC
+                         "bedrooms",           # BEDROOMS
+                         "floorspace.sq.ft",   # FINISHEDLIVINGAREA in square feet
+                         "zip.code",           # PROPERTYZIP
+                         "owner.renter",       # created above
+                         "bathrooms")          # created above
+```
+
+For Problems 1 - 4, use the data that does not include zip code. 
+
+```{r }
+pgh.sales.no.zip <- dplyr::select(pgh.sales, - zip.code)
+pgh.sales.no.zip<-as.data.frame(pgh.sales.no.zip)
+
+```
+
+### Step 1: Define "polycor function(copied from Lecture-12)"
+```{r}
+# Function taken from ?pairs.  
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    require(polycor)
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = pmax(1, cex.cor * r))
+}
+
+```
+
+### Problem 1 (1 point)
+
+To explore candidates for model selection, use the "pairs" and "hetcor" functions. Which independent variables appear to correlate with price? Which independent variables appear to correlate with each other? Why? 
+```{r}
+pairs(pgh.sales.no.zip,lower.panel =  panel.cor)
+```
+
+```{r }
+corrplot.pgh.sales<-hetcor(pgh.sales.no.zip)
+corrplot(corrplot.pgh.sales$correlations)
+```
+
+I have used the correlation plot with values and the hector function to determine the correlation of independent variables to price and also determine correlations among these independent variables.The results are:      
+
+*Variables correlating with price:*  Lot Size, Condition, no. of bedrooms, living area, ownership and no. of bathrooms appear to correlate with price. Out of these variables, based on the correlation values and hetcor graph- condition, living area and number of bathrooms are strongly correlated with price while lot size, number of bedrooms and ownership appear to be weakly correlated with price. 
+
+*Variables correlating with each other:* There appear to be multiple correlations among independent variables:  
+ 1. Lot size and finished living area are positively correlated. Finished living area is a part of lot area of parcel of land so it is intutive that bigger apartments will be in parcels having larger area.   
+ 2. No. of bedrooms and Finished living area are strongly and positively correlated. This could be because more the number bedroom, larger the finished living area would be in most of the cases. No. of bedrooms also appears to be positively correlated with no. of bathrooms.  
+ 3. Finished living area and no. of bathrooms are strongly and positively correlated.This could be because increase in number of bathrooms will lead to increase in the finished living area.  
+
+
+### Problem 2 (2.5 pts)
+
+Run a linear model that predicts price as a function of all variables in the data. Then run two subsequent models: one in which you remove only the variable "floorspace.sq.ft" and another in which you remove only the variable "bedrooms.""
+ 
+
+```{r }
+price_variation<-lm(price~lot.size.acres + condition + type + bedrooms+floorspace.sq.ft + owner.renter + bathrooms,data =  pgh.sales.no.zip)
+summary_all<-summary(price_variation)
+
+price_variation_1<-lm(price~lot.size.acres + condition + type + bedrooms+ owner.renter + bathrooms ,data= as.data.frame(pgh.sales.no.zip))
+summary_variation1<-summary(price_variation_1)
+
+price_variation_2<-lm(price~lot.size.acres + condition + type +floorspace.sq.ft + owner.renter + bathrooms ,data= as.data.frame(pgh.sales.no.zip))
+summary_variation2<-summary(price_variation_2)
+summary_all
+summary_variation1
+summary_variation2
+
+```
+
+
+**a. Compare the coefficients and p-values for floor space and bedrooms for each model. Compare the results for bedrooms across each model, then do the same for floor space.  Conceptually describe why they are different.** 
+```{r}
+compare_variation<-matrix(nrow = 2,ncol = 9)
+rownames(compare_variation)<-c("floorspace","bedrooms")
+colnames(compare_variation)<-c("intercept.all","slope.all","pvalue.all","intercept.variation1","slope.variation1","pvalue.variation1","intercept.variation2","slope.variation2","pvalue.variation2")
+compare_variation[1,]<-c(summary_all$coefficients[1,1],summary_all$coefficients[15,1],summary_all$coefficients[15,4],NA,NA,NA,summary_variation2$coefficients[1,1],summary_variation2$coefficients[14,1],summary_variation2$coefficients[14,4])
+compare_variation[2,]<-c(summary_all$coefficients[1,1],summary_all$coefficients[14,1],summary_all$coefficients[14,4],summary_variation1$coefficients[1,1],summary_variation1$coefficients[14,1],summary_variation1$coefficients[14,4],NA,NA,NA)
+compare_variation
+
+```
+
+**Comparison **:   
+  1. *For variable "floorspace"*: The result of comparison above for show that the intercept and slope for variable "floorspace" are greater for the case when all variables are included in the linear modelling than that for the case where the variable "bedroom" was removed.P-values are smaller in later case indicating much stronger correlation of price with floorspace when variable "bedrooms" is removed. 
+  
+ 2. *For variable "bedrooms"*:There is not much difference in the value of intercept while vary large variation in the value of slope from the case when all variable are considered and case where "floorspace" is removed.The slope increase by a large amount in the later case. In first case of modelling with all variables included, the p-value for "bedroom" was 0.07, which is high enough to suggest that there is no correlation between no. of bedrooms and price. After the variable "floorspace" is removed, p-value has decreased to 0.0000111 indicating strong correlation of price with "bedrooms" when variable "floorspace" is removed.  
+ 
+ *Reasons for the difference*: The probable reason for the difference is that as already seen in Problem 1, variable "floorspace" and "bedrooms" are strongly related to each other. Living area or"floorspace" is the major variable affecting the price, but owing to its strong relation with "bedrooms", inclusion of "bedroom"" in the data enhances its influence. This is why both intercept and slope for "floorspace" decrease in the case when "bedrooms" is removed from the analysis.For the same reasons, the influence of "bedrooms" increase when "floorspace" is removed from the analysis.  
+
+
+**b. Compare the adjusted R-squared values for each model. Which variable, bedrooms or floor space, better explains variability in price? Provide an intuitive interpretation of the differences in adjusted R-squared.**    
+```{r}
+comparison_rsquare_value<-data.frame(with.all.variables=summary_all$adj.r.squared,with.floorspace.removed=summary_variation1$adj.r.squared,with.bedrooms.removed=summary_variation2$adj.r.squared,row.names = "adj.rsq.values")
+comparison_rsquare_value
+```
+
+**Interpretation:** The adjusted R2 values of our models show that 68.79% of variations in price can be explained if all variables are included. This decreases to 61.2% of variations if the variable "floorspace" is removed and 68.74% if variable "bedrooms" is removed. Variable "floorspace" better explains variability in price.  
+
+### Problem 3 (2.5 pts)
+
+Using your model from Problem 2 that excludes the number of bedrooms as an independent variable, use the "plot" function to show the distribution of residuals (errors) and how your residuals vary with the predicted (fitted) prices.
+
+```{r }
+
+plot(price_variation_2,which=1:2)
+```
+**a. Describe potential violations of OLS assumptions demonstrated by your model.**    
+```{r}
+summary(price_variation_2)
+```
+
+*Potential violations of OLS assumptions demonstrated by the model are:*  
+  1. Assumption of linearity between dependent and independent parameters is not true for all of the selected variables.  
+  2. The mean value of error is not zero as can be seen from the plot between residuals and fitted values.  
+  3. There is some correlation among the independent variables as listed in Problem 1. So the assumption of OLS regarding "Limited co-linearity (correlation) amongst the independent variables", may be violated.  
+  4. The assumptions regarding residuals having constant variance is violated. As seen from the plot, the variance in residuals for lower values of price are less when compared to higher values of price.  
+  5. Residuals are not normally distributed as seen from the q-q plot
+
+**b. Log transform your dependent variable "prices." Do the model diagnostics improve? Conceptually explain why.**   
+
+```{r}
+price_variation_2log<-lm(log(price)~lot.size.acres + condition + type +floorspace.sq.ft + owner.renter + bathrooms ,data=pgh.sales.no.zip)
+plot(price_variation_2log,which=1:2)
+summary(price_variation_2log)
+```
+
+*Yes, the model diagnostic improved as the mean of errors is now more closer to zero.Also the variance is more uniform than the previous case. This improvement in model diagnostic can be attributed to the impact of log scale.Log transformation of the dependent variable reduces the space between units. This has the effect making the variance more uniform and mean of errors close to zero.*     
+
+c. Run a model that transforms both price and floor space. Provide interpretations of the floor space coefficient for the level model (model not transformed), the log-level model, and the log-log model. For each model, describe how price changes with floor space.  
+```{r}
+price_variation_2trans<-lm(log(price)~lot.size.acres + condition + type +log(floorspace.sq.ft) + owner.renter + bathrooms ,data=pgh.sales.no.zip)
+plot(price_variation_2trans,which=1:2)
+summary(price_variation_2trans)
+```
+
+  1. **"level-level" model**- For this model, the value of coefficient is 108.6, which means that unit increase in "floorspace" will increase the price by a factor of 108.6.    
+  2. **"log-level" model**- For this model, the value of coefficient is 0.00035, which means that unit increase in "floorspace" will increase the price by ((exp^B1)-1)`*`100% = 3.5%.   
+  3. **"log-log" model** - For this model, the value of coefficient is 0.762, which means the ratio of % change in price variable to % change in "floorspace" variable is 0.762.  
+
+
+### Problem 4 (1 pt)
+
+Using the results of your model from Problem 3.b., which types of housing have the highest and second-highest sale prices? Do owner occupied homes or rental sell for more?  
+```{r}
+summary(price_variation_2log)
+```
+
+*"Townhouse" type of housing has the highest price. "Single Family" type of housing has the second highest price.*  
+*Owner occupied homes sell for higher prices when compared to rental homes.*    
+
+### Problem 5 (1 pt)
+
+Now apply your model from Problem 3.b. to the dataframe (pgh.sales) including zip codes.  Do zip codes explain any additional variability in price over and above your model from Problem 3.b.? Provide a plausible explanation of the effect of zip codes on your model.  
+```{r}
+price_variation_2zip<-lm(log(price)~lot.size.acres + condition + type +floorspace.sq.ft + owner.renter + bathrooms+zip.code ,data=pgh.sales)
+summary(price_variation_2zip)
+```
+
+*With addition of zip value to the model in 3b the adjusted R-squared value has increased from 61.43% to 69.08%. This means with inclusion of zip codes we can explain greater percentage of variability in price. One of the plausible explanation for this effect could be that some areas are costly compared to other areas owing to different factors like crime rates, proximity to schools,etc. Including the zip code to our analysis helps us in including these effects to analyse the price variations. *    
+
+### Extra credit (2 pts)
+
+You suspect that the relationship between floor space and sale price is different for owner-occupied and rental properties. Test this and interpret your results.  
+
+```{r}
+lm.with.interaction <- lm(log(price) ~ lot.size.acres + condition + type + floorspace.sq.ft + owner.renter + bathrooms + zip.code + owner.renter*floorspace.sq.ft, data = pgh.sales)
+
+summary(lm.with.interaction)
+```
+
+**For Owner-occupied properties:** Intercept= 8.16; Slope =0.0002314. So, relationship between floorspace and sale price is given by-  
+Price = 8.16+0.0002314`*`floorspace  
+**For Rental properties:** Intercept = 8.16-(-0.2559)=8.4159; Slope =.0000359-0.0002314= -0.000195. So, relationship between floorspace and sale price is given by-  
+Price = 8.4159-0.0000195`*`floorspace.

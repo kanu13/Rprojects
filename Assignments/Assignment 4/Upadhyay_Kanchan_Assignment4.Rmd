@@ -1,0 +1,108 @@
+
+---
+title: "Assignment 4"
+author: "Kanchan Upadhyay"
+output: 
+  html_document:
+    toc: true
+    theme: paper
+    highlight: tango
+---
+
+Some of this problem is modified from Dr. Chouldechova's notes for Lecture 7, http://www.andrew.cmu.edu/user/achoulde/94842/index.html. I like the way she uses simulation to cover hypothesis testing, and you are free, even encouraged, to use her lecture notes in completing this problem.  However, I place some constraints on how your code to ensure your solution is different than what is on Dr. Chouldechova's notes. 
+```{r}
+require(tidyverse)
+require(ggplot2)
+```
+
+### Problem 1 (2.5 pts)
+Write a function called "sample.maker" that generates a random sample of normally distributed outcomes for two different groups: a control group and a treatment group. "sample.maker" should take five arguments: means for each group, sample sizes for each group, and a standard deviation assumed to be equal for both groups. "sample.maker" should return a dataframe with two columns, group and outcome, where the outcome is randomly generated per the distribution statistic arguments (meand and std dev). The number of rows should be the total sample size (treatment plus control group). Test your function by generating a sample with treatment and control sample sizes of 100 and 80; treatment and control sample means of 30 and 29, and a standard deviation of 5. Show that your function worked by printing a boxplot of its result. **Your code must simulate samples for each group using separate lines of code.** 
+```{r}
+
+sample.maker<-function(size.treat, size.control, mean.treat, mean.control, std.dev){
+  sample.control<-rnorm(size.control,mean = mean.control,sd=std.dev)
+  sample.treat<-rnorm(size.treat,mean = mean.treat,sd=std.dev)
+  sample.maker.treat<-data.frame(group="Treatment",outcome=sample.treat)
+  sample.maker.control<-data.frame(group="Control",outcome=sample.control)
+  return(rbind(sample.maker.treat,sample.maker.control))
+}
+sample.maker.data<-sample.maker(size.treat=100, size.control=80, mean.treat=30, mean.control=29, std.dev=5)
+ggplot(sample.maker.data) +geom_boxplot(mapping = aes(x=group,y=outcome))
+```
+
+### Problem 2 (0.5 pt)
+The formula for the t-test for a difference in group means is 
+
+t.two.sample = ((mean1 - mean2) - (hypothesized difference)) / sqrt(var1^2/n1 + var2^2/n2) 
+      
+This is often called a "two-sample" t-test because we draw on two samples: a control and a treatment group. For an overwhelming majority of applications, we are interested only in differences in group means, e.g., the hypothesized difference is equal to zero. We also often assume equal group variances (var1 = var2). In the special case where the group sample sizes are also equal, the two-sample t-test often simplifies to
+
+t.two.sample.means.equal.var = (mean1 - mean2) / sqrt(2*var^2/n) 
+                             = (mean1 - mean2) / (stdev * sqrt(2/n)
+
+In class, we conducted a one sample t-test with KNOWN population mean and standard deviation using the following test statistic.
+
+z.one.sample = (sample mean - population.mean) / (population.stdev / sqrt(n))
+
+What is the "signal" and what is the "noise" for the one sample test (z.one.sample) and the two sample test (t.two.sample.means.equal.var)? For which test is the noise larger? Why do you think that is?
+
+*Note answers to this question should be only text. No math or calculations.*   
+
+**Solution:**  
+In one sample test we compare the sample to our population. This test can be performed only if mean and standard deviation for original population data are available.For one sample test, Signal= Sample mean - Population mean ; Noise = (Standard deviation in Population)/squareroot of no.of data points).    
+In most cases, we don't have the original population data but samples from that data so we use two sample test. For two sample test, Signal= Difference between mean of two samples ; Noise = Average of variance of two sample means.  
+
+Noise will be larger for two sample test as no. of data points in samples are less than those present in the original polulation data.
+
+
+### Problem 3 (3.5 pts)
+Now write a function called "p.val.generator" that repeatedly prepares a sample using your function from Problem 1. For each sample, "p.val.generator" should conduct a t-test for the difference in means across the control and treatment groups and return the p-value from the t-test. In addition to all the arguments required of "sample.maker," the number of desired simulations should also be an arguments to "p.val.generator." "p.val.generator" should return a dataframe with two columns: the incremental simulation number (e.g., 1, 2, 3, etc.) and the p-value from that simulations. Test your function by repeating t-tests for 1000 samples assuming there is no difference in outcome between a treatment and control groups with equal sample sizes of 100, sample means of 30, and a standard deviation of 10. Show a histogram of the resulting p-values.  Assuming a critical value of 0.05, what type of error (I or II) is occurring when the t test retuIrns a p-value below 0.05? Are these errors present in the tests from your simulated samples? 
+
+```{r}
+p.val.generator<-function(size.treat, size.control, mean.treat, mean.control, std.dev,n){
+  p.val<-matrix(0, nrow = n,ncol = 2)
+  colnames(p.val)<-c("simulation_num","p_value")
+  for(i in 1:n){
+    sample.maker.data<-sample.maker(size.treat=size.treat, size.control=size.control, mean.treat=mean.treat, mean.control=mean.control, std.dev=std.dev)
+    p.val[i,1]<-i
+   p.val[i,2]<-t.test(sample.maker.data$outcome~sample.maker.data$group)$p.value
+  }
+  return(p.val)
+  }
+p.values.null<-as.data.frame(p.val.generator(size.treat=100, size.control=100, mean.treat=30, mean.control=30, std.dev=10,n=1000))
+ggplot(data=p.values.null)+geom_histogram(mapping = aes(x=p_value))+geom_vline(xintercept=0.05,colour="red")
+
+```
+
+*Type-I error occurs when t-test returns a value less than the p-value of 0.05.   
+For this case, null hypothesis is true as control and treatment samples have same means, however as seen from the histogram for some of the simulations, the p-value is less thatn 0.05. So Type-I error is present in the test from simulated samples.*   
+
+### Problem 4 (1.5 pts)
+
+##### Part a. 
+Using "p.val.generator," run 1000 sumulations assuming the sample distribution values from Problem 1 (treatment and control sample sizes of 100 and 80; treatment and control sample means of 30 and 29, and a standard deviation of 5). Plot a histogram of the resulting p-values and use this a reference for parts b and c. 
+```{r}
+p.values.alt<-as.data.frame(p.val.generator(size.treat=100, size.control=80, mean.treat=30, mean.control=29, std.dev=5,n=1000))
+ggplot(data=p.values.alt)+geom_histogram(mapping = aes(x=p_value))+geom_vline(xintercept=0.05,colour="red")
+```
+
+*For the above sample values, more than 150 p-values are less that the threshold value of 0.05.*    
+##### Part b.
+Using the distribution and inputs from part a as a reference, identify one argument that will increase the likelihood that you reject the null hypothesis of zero difference in group means. Relative to part a, change the value of this argument so that most tests - but not all - would reject the null hypothesis at a crtical p-value of 0.05. Show the distribution of p values from your tests. In ONE SENTENCE, explain why the distribution of p-values are different.  
+
+
+```{r}
+p.values.alt<-as.data.frame(p.val.generator(size.treat=100, size.control=80, mean.treat=32, mean.control=29, std.dev=5,n=1000))
+ggplot(data=p.values.alt)+geom_histogram(mapping = aes(x=p_value))+geom_vline(xintercept=0.05,colour="red")
+```
+
+*I have increased the difference between the two means because of which chances of rejection of null hypothesis are expected to increase. This is evident from the distribution of p-values in the histogram above where most of the p-values are below the threshold value of 0.05.So this change will increase the likelihood that we reject the null hypothesis of zero difference in group means*  
+
+##### Part c. 
+Again using part a as a reference, repeat all of part b choosing a different parameter (if you use a group mean for part b, do not use the other group mean for part c). In ONE SENTENCE, again explain why the distribution of p-values are different.
+```{r}
+p.values.alt<-as.data.frame(p.val.generator(size.treat=100, size.control=80, mean.treat=30, mean.control=29, std.dev=10,n=1000))
+ggplot(data=p.values.alt)+geom_histogram(mapping = aes(x=p_value))+geom_vline(xintercept=0.05,colour="red")
+```
+
+*For this part, I have increased the value of standard deviation to 10 from 5. Increasing the standard deviation in the mean value increases the variations in the two means which makes the distribution of p-values more uniform. It decreased the number of p-values below 0.05 from 150 to 100 which means that likelihood of rejection of null hypothesis are decreased.This happens as the difference in two means have more distributed variations now. *

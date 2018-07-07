@@ -1,0 +1,85 @@
+---
+title: "Assignment 2"
+author: "Your Name Here"
+date: 'Assigned '
+output: 
+  html_document:
+    toc: true
+    theme: paper
+    highlight: tango
+---
+
+### 0. Reminder
+
+Use the file naming instructions described at the beginning of assignment 1. This reminder will not be included in subsequent assignments. 
+
+### Problem 1 (1 pt)
+
+1.	In your own words, describe what each of the following functions in the dplyr package do.
+
+a.	Filter
+b.	Select 
+c.	Arrange 
+d.	Mutate 
+e.	Summarise 
+f.	One_of
+
+### Problem 2 (1 pt)
+
+Find all flights from the "flights" data in the "nycflights13" package that
+
+* Departed early
+* Flew to Pittsburgh (PIT) and arrived late
+* Departed early from in New York (LGA, JFK)
+* Departed in the morning
+* Arrived more minutes late then they left early. (Think carefully about this one!)
+
+### Problem 3 (6 pts)
+
+In this problem, we will use the Residential Energy Consumption Survey (RECS) to explore what influences energy used for heating in single-family homes. RECS is a regular survey of energy consumption in U.S. households (https://www.eia.gov/consumption/residential/).  I have included a cleaned version of the household-level responses (the "microdata") at "https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/RECS.csv"
+
+If you explore the RECS data, you’ll see that there are over 500 fields published for each household. You will be substantially manipulating the raw RECS data. As a result, you may find it easier to occasionally create new objects for use in subsequent steps so as to avoid having to repeat lines of code when you make errors. There are no prescribed rules for when to create new objects versus modify existing objects. You'll just have to exercise judgement.  Reflect any subsetting you perform in subsequent steps. 
+
+a.	Select only the following variables from the dta
+
+* TOTHSQFT = floorspace heated in square feet
+* ADQINSUL = a factor variable (ordinal) indicating level of insulation
+* REPORTABLE_DOMAIN = smallest geography reported while preserving confidentiality 
+* TOTALBTUSPH = total amount of energy used for heating in British Thermal Units (BTU)
+* EQUIPAGE = Age of heating equipment
+* PROTHERM = Indicates the use of a programmable thermostat
+* TYPEHUQ = Type of household
+* FUELHEAT = Energy source for heating 
+* EQUIPM = Type of equipment using for heating
+
+b. Using dplyr functions, use two different approaches to selecting only single family homes, not including mobile homes. In one approach, use the "or" operator, "|." In the other, use the "%in%" operator. 
+
+c.	Using dplyr functions, add a field that displays heating energy used per sq ft of floor space. Why does the function return "NaN" for some homes? 
+
+d. Use the "ifelse" function to assign a value of 0 to any observation where btu.per.sqft is "NaN." Note the function "is.nan()" returns a logical value of TRUE if the argument is NaN. It performs similarly to is.na().
+
+e. Sort the recs data so that homes with missing values for PROTHERM are on the top and review the results.
+
+f. You can see that many homes without programmable thermostats burn wood in a heating stove for heat. Wood use is less accurate than use of electricity or natural gas, which is metered by a utility company. Remove all records that use an energy source other than electricity or natural gas. 
+
+g.	Find the mean and standard deviation of energy consumption used by reportable geographic domain and include a count of observations by group.
+
+h. Using the summary table from step g, print a table that shows the geographies with the 10 highest heating energy use per square foot. Why do you think these areas are relatively high?
+
+i. Let's remove homes without any energy used for heating. Why might we want to do this? We do this because all of the homes with zero consumption are not readily comparable to those with consumption. In a more sophisticated approach, we might develop a two-stage model where we predict those homes that have some consumption, then use those predictions in a subsequent model that explains consumption. However, this approach is well beyond the scope of this course. 
+
+j.	Prepare a scatter plot showing heating energy used (y-axis) as a function of heated floorspace (x-axis). On average, do larger homes use more energy for heating? 
+
+k.	Now prepare separate scatterplots of heating energy used as a function of floorspace, one plot for each response of equipment age.  Add to these plots a linear regression line. 
+
+l. By inspection, you can some extreme values for both energy consumption and floorspace that are likely outliers.  Remove all observations where consumption and floorspace are greater than 300,000 BTU and 10,000 sq ft, respectively, and generate the plots again. By inspection, does newer or older heating equipment use more or less energy? Why do you think that is? 
+
+m. Let's reorder the factor levels and redefine the labels for EQUIPAGE and ADQINSUL. I have included the code for doing for EQUIPAGE. Using the code provided for EQUIPAGE as a guide, reorder ADQINSUL in order of decreasing amounts of insulation and rename the factors so their description is shorter. 
+
+```{r}
+recs$EQUIPAGE <-  factor(your.data.frame.name$EQUIPAGE, 
+                         levels = c("Less than 2 years old", "2 to 4 years old", "5 to 9 years old",                                                          "10 to 14 years old", "15 to 19 years old", "20 years or older"), 
+                         labels = c("< 2","2-4", "5-9", "10-14", "15-19", "> 20"))
+```
+
+n. Now prepare a boxplot with equipment age on the x-axis, energy use PER SQUARE FOOT, on the y axis, and color code the plot by the presence the degree of insulation. How does insulation appear to effect consumption? 

@@ -1,0 +1,104 @@
+---
+title: "Assignment 1"
+author: "Your Name Here"
+date: 'Assigned Oct 24; Due Nov 1 2017'
+output: 
+  html_document:
+    toc: true
+    theme: paper
+    highlight: tango
+---
+
+Please delete the material between here and the first problem before submitting your assignment. Don't forget that you get 1 point for knitting and 1 point for demonstrating good coding style. 
+
+This template has been modified from Chouldechova (http://www.andrew.cmu.edu/user/achoulde/94842/index.html). 
+
+To complete this assignment, follow these steps:
+
+1. Download the `Assignment1.Rmd` file from Canvas. 
+2. Rename the `Assignment1.Rmd` to `YourLastName_YourFirst_Name_Assignment1.Rmd.`
+3. Open the.Rmd file in RStudio. (File -> Open File)
+4. Replace the "Your Name Here" text in the above `author:` field with your own name.
+5. Provide solutions to each problem by editing `Assignment1.Rmd` and saving your edits.
+
+##### Homework tips:
+
+1. Note the following useful RStudio hotkeys.
+
+|Keystroke      | Description |
+|----------------|-----------------------------------------------------------------------------|
+| `<tab>`        | Autocompletes commands and filenames and lists arguments for functions.|
+| `<up>`         | Cycles through previous commands in the console prompt |
+| `<ctrl-up>`    | Lists history of previous commands matching an unfinished one |
+| `<ctrl-enter>` | Runs current line from source window to Console. Good for trying things out ideas from a source file. |
+| `<ESC>`        | Aborts an unfinished command and get out of the + prompt |
+
+**Note**: Shown above are the Windows/Linux keys.  For Mac OS X, the `<ctrl>` key should be substituted with the `<command>` (&#8984;) key.
+
+2. Instead of sending code by line with `<ctrl-enter>`, you can send code by selection, chunks, and even run all of code chunks in your .Rmd file. Look under the Run menu of the Source panel.
+
+3. Run your code in the Console and Knit HTML to check for errors as you make incremental progress.
+
+4. You may find it easier to solve a problem by interacting only with the Console at first. 
+
+## Problem 1 (1 pt)
+
+1.	Suppose you were going to survey people to better understand individual's habits for commuting to school or work. Specify at least 5 ratio variables, 5 nominal variables, and 3 ordinal variables that you would include in your survey and indicate what R data types you would map to these variables.
+
+Note solutions to Problem 1 do not require any R code. They only require a response in plain text. 
+
+For 0.5 extra credit points, format your response to Problem 1 in italic font.
+
+## Problem 2 (2 points)
+
+a. Assume your are preparing an inventory of computers used in class. You take a sample of 5 computers. Create 4 vectors that contain the computer make, hard drive space, operating system (either osx or windows only), age, and screen size. Show that the are the appropriate class (or type), such factor, numeric, etc. You can make up the content of the information. 
+
+b. Assemble these vectors into a data frame called "class.computers" and print the five.cars to the console. 
+
+c. Use indexing to separately print the age field then all values of the third row. 
+
+## Problem 3 (1.5 point)
+
+Replace "3", "50", "30", and "5" with in-line code that assigns 3, 50, and 30 to a variable and uses those variables to calculate the expenditure on gasoline of 5. The result in your markdown file should be the same as the sentence below. All of your variable assignments must occur in-line with the sentence. 
+
+If the price of gasoline is 3 dollars per gallon and I drive 50 miles in a car with a fuel economy of 30 miles per gallons, I will pay 5 dollars for gasoline.
+
+What would happen if, instead of writing the sentence as above, you tried to write the sentence as follows.  
+
+I will pay 5 dollars for gasoline if the price of gasoline is 3 dollars per gallon and I drive 50 miles in a car with a fuel economy of 30 miles per gallons.
+
+## Problem 4 (3.5 points)
+
+### Get the data
+
+I have set up an amazon website to store data so that you can use the "read.csv" function inside of your markdowns. For assignment 1, I have included the code to download the data below. However, you will be expected to create this code in the future. 
+
+```{r}
+birthwt <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/birthwt.csv", header = TRUE)
+```
+
+**Don't change any of the data! Some of these data are problematic by design!**
+
+### Install and load the packages
+
+Install the package ggplot2. You can do this by either selecting "Install" from the "Package" pane, then typing ggplot2. You could also install it by running "install.pacakges("ggplot2") the console. Just don't include the call to "install.packages" in your markdown for reasons we discussed in class.
+
+Load ggplot2 with the function require() or by clicking on the box next to their names in the "packages" pane. 
+
+### Complete the assignment
+
+Which of the fields in birthwt are assigned the wrong type (e.g., numeric, factor, integer)? 
+
+Let's explore what might influence birth weight by developing and viewing a series of plots.  Prepare a scatter plot (type geom_point) that shows birth weight on the y-axis and age on the x-axis. Do you see any trends in this scatterplot? 
+
+Now color code the above scatter plot by the field "mother.black." What is wrong with the legend scale and why is it happening? 
+
+Now color code the above scatter plot by race and prepare a boxplot showing how birthwt varies by race. Did the boxplot identifier any outliers? For which race is the median birth weight lowest? For which race is the birth weight most variable? 
+
+Of the two different graphs visualizing variation in birth weight by the mothers race, which do you prefer and why? 
+
+Now assign to a variable (e.g., birthwt.plot) a ggplot object that takes only one argument: data = birth weight. Add to this object geom_point and geom_smooth graphs that shows age on the x-axis, birth weight on the y axis, and color codes the results by the variable mother.smokes. Make the "method" argument to geom_smooth "lm," which stands for linear model. Done properly, your plot should include separate linear models for mothers who do and do not smoke.  
+
+Change the axis labels to read "mother's age in years" and "newborn birth weight in grams."
+
+What do the results say about the effect of smoking on birthweight?

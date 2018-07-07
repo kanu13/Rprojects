@@ -1,0 +1,105 @@
+---
+title: "Assignment 3"
+author: "Kanchan Upadhyay"
+date: 'Assigned Nov 9 2017; Due Nov 16 2017 '
+output: 
+  html_document:
+    toc: true
+    theme: paper
+    highlight: tango
+---
+
+This assignment asks you to make two charts from relatively raw, unstructured data. While I have performed some data cleaning, you will need to perform a fair amount of data manipulation. Consider this assignment good practice for your projects and representative of the challenges of working with raw data. 
+
+There are 6 data sets describing energy consumption, production, CO2 emissions, and economic output (gross domestic product) by country. I have included code below to import the data, which you are welcome to revise if needed. 
+```{r}
+require(tidyverse)
+require(dplyr)
+```
+
+```{r}
+ren <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/EIA_renewables_terajoules.csv", header = TRUE)
+nuc <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/EIA_nuclear_terajoules.csv", header = TRUE)
+prod <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/EIA_production_terajoules.csv", header = TRUE)
+cons <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/EIA_consumption_terajoules.csv", header = TRUE)
+co2 <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/EIA_CO2_million_metric_tonnes.csv", header = TRUE)
+gdp <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/WEO_gdp_billions_US_dollars.csv", header = TRUE)
+```
+
+The energy and emissions data come from https://www.eia.gov/beta/international/data/browser/.
+The economic activity data come from https://www.imf.org/external/pubs/ft/weo/2017/01/weodata/weoselgr.aspx.
+
+Energy has historically been fundamental to economic growth. Despite improvements to the performance of renewables and nuclear, which emit no carbon when converting primary energy to electricity, fossil fuels offer much better energy density and storage performance. As a result, there is considerable uncertainty about how global fossil fuel commodity markets could undermine domestic climate mitigation efforts in that local changes to fossil fuel markets could simply increase international sales.  We will superficially explore these issues in this assignment.
+
+First, MERGE AND manipulate the data to be at the level of country-year. In other words, each row should be a unique country and year. **For 1 point,** show that these data meet this specification by using either the function "unique" or "duplicated," and print the first 10 rows of your table.  
+
+## Making data tidy by bringing it to the level of country-year
+```{r supress_warning, warning = FALSE}
+ren.data<-ren%>%gather(X1980:X2015,key="year",value = "renewable_tj")
+nuc.data<-nuc%>%gather(X1980:X2015,key="year",value = "nuclear_tj")
+prod.data<-prod%>%gather(X1980:X2014,key="year",value = "production_tj")
+cons.data<-cons%>%gather(X1980:X2014,key="year",value = "consumption_tj")
+co2.data<-co2%>%gather(X1980:X2014,key="year",value = "co2_mmt")
+gdp.data<-gdp%>%gather(X1980:X2014,key="year",value = "gdp_bnusd")
+```
+## Merging Data
+```{r}
+ren_nuc_data<-left_join(ren.data,nuc.data,by=c("country","year"))
+combined_data<-left_join(ren_nuc_data,prod.data,by=c("country","year"))
+combined_data<-left_join(combined_data,cons.data,by=c("country","year"))
+combined_data<-left_join(combined_data,co2.data,by=c("country","year"))
+combined_data<-left_join(combined_data,gdp.data,by=c("country","year"))
+head(as.tibble(combined_data),10)
+```
+## Checking the uniqueness of data  
+```{r}
+data_check<-sum(duplicated(combined_data[c("country","year")]))
+data_check
+```
+
+*Since sum of rows with same country and year are zero, it means data are at the level of country-year.*
+
+From the manipulated data, assemble two charts. First, assemble a scatterplot that shows the energy deficit (consumption minus production) on the x-axis and the log of the gross domestic product (gdp) on the y-axis. Color code these data by the amount of renewables produced, and size the data by the amount of CO2 emitted. Provide some interpretation of your chart. **Your chart will be worth 3 points and your interpretation 1 point.**
+```{r}
+combined_data$renewable_tj<-as.numeric(combined_data$renewable_tj)
+combined_data$nuclear_tj<-as.numeric(combined_data$nuclear_tj)
+combined_data$production_tj<-as.numeric(combined_data$production_tj)
+combined_data$consumption_tj<-as.numeric(combined_data$consumption_tj)
+combined_data$co2_mmt<-as.numeric(combined_data$co2_mmt)
+combined_data$gdp_bnusd<-as.numeric(combined_data$gdp_bnusd)
+combined_data<-mutate(combined_data,energy_deficit_tj=production_tj-consumption_tj)
+ggplot(combined_data)+geom_point(mapping=aes(x=energy_deficit_tj,y=log(gdp_bnusd),colour=renewable_tj,size=co2_mmt))
+```
+
+**Interpretation**- *The graphical result show that high gdp is associated with high energy deficits(negative value) for many countries and also with zero energy deficit and energy surplus(positive values of energy deficit) for some of the cases. I think developing countries like India and China have high GDP values and at the same time high energy deficits whereas developed countries have high GDP as well as low energy deficit or energy surplus.  
+According to graph, renewable energy production is more in cases where gdp and energy deficit are high.  
+For higher gdp values and high energy deficit,the CO2 emissions are high. This can be the case in developing countries where to sustain high gdp, cheap sources like fossil fuels are utilized.*  
+
+Second, produce a line chart with the log of the gdp on the x-axis and the log of co2 on the y-axis for the 20 countries with the highest sum of gdp over the observation period. Overlay on this plot chart a scatter plot with the observations SIZED by the ratio of fossil-free energy (renewables plus nuclear) to ENERGY CONSUMPTION. Facet the charts by country. Are there any large economies that have grown while stabilizing or reducing carbon? Does investment in fossil free energy appear to play any role? **Your chart will be worth 3 points and your interpretation 1 point.**
+```{r}
+combined_gdp_data<-combined_data%>%group_by(country)%>%summarise(sum_gdp=sum(gdp_bnusd,na.rm=TRUE))%>%arrange(-sum_gdp)
+top_gdp<-head(combined_gdp_data,20)
+top_country_data<-filter(combined_data,country%in%top_gdp$country)
+top_country_data<-mutate(top_country_data,fossil_free_ratio=(renewable_tj+nuclear_tj)/consumption_tj)
+ggplot(top_country_data)+geom_line(mapping = aes(x=log(gdp_bnusd),y=log(co2_mmt)))+facet_wrap(~country,nrow =4)+geom_point(mapping = aes(x=log(gdp_bnusd),y=log(co2_mmt),size =fossil_free_ratio))
+```
+
+**Interpretation**- *Among large economies- Canada, France, Japan, Netherland, Russia, Spain, Switzerland, United Kingdom and United States have grown while stabilizing carbon emissions. Germany and Sweden even appear to have grown while reducing carbon emissions.  
+From the graph, it looks like above countries have high ratio of fossil free energy in their total energy consumption, so investmentment in fossil free energy appears to play a role in attaining a low emission growth.*   
+
+In producing the above, the only requirements you need to meet are that you need to use "gather" and a join function in assembling the data. Depending on how you accomplish this, you may find the use of an "apply" family function helpful, but it is not necessary.  
+
+To save a little time, I include the following character vectors that identify missing values. 
+
+```{r eval = FALSE, include = FALSE}
+eia.na.values <- c("--","-", "- ", "NA","")
+imf.na.values <- c("n/a")
+```
+
+You will notice that R appends an "X" to any field imported that begins with a number. Here, these include all of the year fields. For 0.5 pts extra credit, use a string function to address this. Helpful string functions are discussed in the textbook, and many more can be found in other online resources. IF YOU CHOOSE TO TRY THE EXTRA CREDIT, YOU MUST ADD THE COMMENT "EXTRA CREDIT" IN LINE WITH YOUR CODE FOR IT TO BE GRADED. Reminder: The instructor and TA's will not answer questions about extra credit.  
+##Extra Credit
+```{r}
+mod_combined_data<-combined_data%>%mutate(year=str_sub(year,2,5)) #Extra credit
+head(as.tibble(mod_combined_data))
+```
+

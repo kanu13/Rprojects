@@ -1,0 +1,115 @@
+---
+title: "Assignment 5"
+author: "Your Name Here"
+date: 'Assigned Oct 9, Due Oct 16'
+output: 
+  html_document:
+    toc: true
+    theme: paper
+    highlight: tango
+---
+
+```{r}
+require(ggplot2)
+require(tidyverse)
+require(forcats)
+require(polycor)
+require(corrplot)
+```
+
+### 0. Read and Clean Data
+
+I include some code below to read and clean the data. 
+
+```{r}
+pgh.sales <- read.csv("https://s3.amazonaws.com/aws-website-programminginrforanalytics-tbal0/data/pgh_sales_2012_nov2017.csv", header = TRUE)
+
+pgh.sales$owner.renter <- ifelse(pgh.sales$HOMESTEADFLAG == "HOM", "owner occupied", "rental")
+pgh.sales$owner.renter <- factor(pgh.sales$owner.renter)
+# Assume missing values for full and half bathrooms means 0
+pgh.sales$bathrooms <- ifelse(is.na(pgh.sales$FULLBATHS), 0, pgh.sales$FULLBATHS) + 
+                       ifelse(is.na(pgh.sales$HALFBATHS), 0, pgh.sales$HALFBATHS/2)
+pgh.sales <- dplyr::select(pgh.sales, -HOMESTEADFLAG, -FULLBATHS, - HALFBATHS)
+
+pgh.sales$PROPERTYZIP <- factor(pgh.sales$PROPERTYZIP)
+
+pgh.sales$CONDITIONDESC <- factor(pgh.sales$CONDITIONDESC, 
+                              levels = c("UNSOUND", 
+                                         "VERY POOR",
+                                         "POOR",
+                                         "FAIR",
+                                         "GOOD",
+                                         "VERY GOOD",
+                                         "EXCELLENT"))
+
+pgh.sales$PROPERTYZIP <- fct_reorder(pgh.sales$PROPERTYZIP, pgh.sales$PRICE)
+pgh.sales$USEDESC <- fct_reorder(pgh.sales$USEDESC, pgh.sales$PRICE)
+
+# Drop all rows with missing values and zero lot size or floor space
+
+pgh.sales <- filter(pgh.sales, FINISHEDLIVINGAREA > 0 & LOTAREA > 0)
+pgh.sales <- na.omit(pgh.sales)
+pgh.sales <- droplevels(pgh.sales)  # drop unused levels
+
+```
+
+The code below renames the variables for convenience. I indicate the original name in case you need to review the metadata at data.wprdc.org/dataset/real-estate-sales and data.wprdc.org/dataset/property-assessments. 
+
+```{r}
+colnames(pgh.sales) <- c("price",              # PRICE 
+                         "lot.size.acres",     # LOTAREA in acres 
+                         "condition",          # CONDITIONDESC 
+                         "type",               # USEDESC
+                         "bedrooms",           # BEDROOMS
+                         "floorspace.sq.ft",   # FINISHEDLIVINGAREA in square feet
+                         "zip.code",           # PROPERTYZIP
+                         "owner.renter",       # created above
+                         "bathrooms")          # created above
+```
+
+For Problems 1 - 4, use the data that does not include zip code. 
+
+```{r}
+pgh.sales.no.zip <- dplyr::select(pgh.sales, - zip.code)
+```
+
+### Problem 1 (1 point)
+
+To explore candidates for model selection, use the "pairs" and "hetcor" functions. Which independent variables appear to correlate with price? Which independent variables appear to correlate with each other? Why? 
+
+### Problem 2 (2.5 pts)
+
+Run a linear model that predicts price as a function of all variables in the data. Then run two subsequent models: one in which you remove only the variable "floorspace.sq.ft" and another in which you remove only the variable "bedrooms.""
+
+a. Compare the coefficients and p-values for floor space and bedrooms for each model. Compare the results for bedrooms across each model, then do the same for floor space.  Conceptually describe why they are different. 
+
+b. Compare the adjusted R-squared values for each model. Which variable, bedrooms or floor space, better explains variability in price? Provide an intuitive interpretation of the differences in adjusted R-squared. 
+
+### Problem 3 (2.5 pts)
+
+Using your model from Problem 2 that excludes the number of bedrooms as an independent variable, use the "plot" function to show the distribution of residuals (errors) and how your residuals vary with the predicted (fitted) prices. 
+
+a. Describe potential violations of OLS assumptions demonstrated by your model.  
+
+b. Log transform your dependent variable "prices." Do the model diagnostics improve? Conceptually explain why.
+
+c. Run a model that transforms both price and floor space. Provide interpretations of the floor space coefficient for the level model (model not transformed), the log-level model, and the log-log model. For each model, describe how price changes with floor space.  
+
+### Problem 4 (1 pt)
+
+Using the results of your model from Problem 3.b., which types of housing have the highest and second-highest sale prices? Do owner occupied homes or rental sell for more?  
+
+### Problem 5 (1 pt)
+
+Now apply your model from Problem 3.b. to the dataframe (pgh.sales) including zip codes.  Do zip codes explain any additional variability in price over and above your model from Problem 3.b.? Provide a plausible explanation of the effect of zip codes on your model.  
+
+### Extra credit (2 pts)
+
+You suspect that the relationship between floor space and sale price is different for owner-occupied and rental properties. Test this and interpret your results.  
+
+```{r}
+lm.with.interaction <- lm(log(price) ~ lot.size.acres + condition + type + floorspace.sq.ft + owner.renter + bathrooms + zip.code + owner.renter*floorspace.sq.ft, data = pgh.sales)
+
+summary(lm.with.interaction)
+```
+
